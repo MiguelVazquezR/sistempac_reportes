@@ -82,7 +82,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _maybeShowLegacyDialog() async {
     final legacyFiles = widget.processingController.files
-        .where((file) => file.isLegacy)
+        .where((file) => file.needsManualConversion)
         .toList(growable: false);
     for (final file in legacyFiles) {
       if (_legacyDialogShown.contains(file.identityKey)) {
@@ -177,6 +177,20 @@ class _HomePageState extends State<HomePage> {
                         onPressed: processing.clearAddErrors,
                         child: const Text('Ocultar'),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (processing.convertibleCount > 0) ...[
+                    StatusBanner(
+                      message:
+                          '${processing.convertibleCount} documento'
+                          '${processing.convertibleCount == 1 ? '' : 's'} .doc '
+                          'se convertirán a .docx al generar los reportes.',
+                      severity: BannerSeverity.info,
+                      details: const [
+                        'La conversión usa Microsoft Word o LibreOffice y no '
+                            'modifica los archivos originales.',
+                      ],
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -370,14 +384,19 @@ class _HomePageState extends State<HomePage> {
 
   String _idleHint(ProcessingController processing) {
     if (!processing.hasFiles) {
-      return 'Agrega al menos un archivo .xlsx o .docx para comenzar.';
+      return 'Agrega al menos un archivo .xlsx, .docx o .doc para comenzar.';
     }
     if (processing.supportedCount == 0) {
-      return 'Los archivos agregados están en formato antiguo: conviértelos a '
-          '.xlsx o .docx para procesarlos.';
+      return 'Los archivos agregados están en formato .xls antiguo: '
+          'conviértelos a .xlsx para procesarlos.';
     }
     final pendientes = processing.supportedCount;
-    return 'Listo para generar $pendientes reporte${pendientes == 1 ? '' : 's'}.';
+    final documentos = pendientes == 1 ? 'reporte' : 'reportes';
+    if (processing.convertibleCount > 0) {
+      return 'Listo para generar $pendientes $documentos '
+          '(${processing.convertibleCount} .doc se convertirán a .docx).';
+    }
+    return 'Listo para generar $pendientes $documentos.';
   }
 }
 

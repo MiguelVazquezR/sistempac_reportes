@@ -89,7 +89,8 @@ class _FileDropCardState extends State<FileDropCard> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Archivos .xlsx (Excel) o .docx (Word). Puedes agregar varios a la vez.',
+              'Archivos .xlsx (Excel), .docx o .doc (Word). Los .doc se '
+              'convierten a .docx automáticamente.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

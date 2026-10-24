@@ -4,11 +4,13 @@ Aplicación de escritorio para Windows que toma reportes de pruebas de tensión
 (en chino o inglés), traduce las etiquetas al español, elimina el logo genérico
 y aplica la identidad de la empresa (nombre, título opcional y logo propio).
 
-- Entrada: `.xlsx` (Excel) y `.docx` (Word).
+- Entrada: `.xlsx` (Excel), `.docx` (Word) y `.doc` (Word 97-2003, se convierte
+  a `.docx` automáticamente).
 - Salida: copia del reporte con sufijo `_ES`, en la misma carpeta del original o
   en la carpeta que definas en **Ajustes**.
-- Sin dependencia de Office, LibreOffice ni servicios en línea: todo el
-  procesamiento ocurre localmente.
+- Sin dependencia de servicios en línea: todo el procesamiento ocurre localmente.
+  La conversión de `.doc` usa Microsoft Word (COM) o, si no está instalado,
+  LibreOffice.
 
 ## Requisitos
 
@@ -72,10 +74,27 @@ flutter build windows --release
 
 ### Formatos antiguos
 
-Los archivos `.xls` y `.doc` **no se convierten**. La aplicación los detecta por
-su firma OLE (`D0 CF 11 E0`), los marca y muestra una guía para guardarlos como
-`.xlsx`/`.docx` desde Excel o Word. Así se evita depender de Office o de
-conversores externos y se conserva el formato original del reporte.
+Los documentos `.doc` (Word 97-2003) **se convierten a `.docx`
+automáticamente** antes de procesarse. La aplicación detecta el formato por su
+firma OLE (`D0 CF 11 E0`) y aplica esta cascada:
+
+1. **Microsoft Word** por automatización COM (`Word.Application`): abre el
+   archivo en modo sólo lectura, con las macros desactivadas y sin diálogos, y lo
+   guarda en una carpeta temporal con `SaveAs2(..., 16)` (formato `.docx`).
+2. **LibreOffice** en modo *headless* (`soffice --convert-to docx`), usando un
+   perfil de usuario temporal para no interferir con una instalación abierta.
+3. Si no hay ninguno de los dos, se muestra un error accionable con las
+   instrucciones para guardar el archivo como `.docx` desde Word.
+
+La conversión ocurre en un directorio temporal que se elimina al terminar: el
+archivo original nunca se modifica y la salida conserva el sufijo `_ES`. Si el
+resultado no es un ZIP OOXML válido, el reporte se marca como fallido en lugar de
+generar un archivo dañado.
+
+Los archivos `.xls` **siguen sin convertirse**: la aplicación los detecta, los
+marca y muestra una guía para guardarlos como `.xlsx` desde Excel. Esto evita
+depender de Excel para el procesamiento y no afecta el comportamiento del
+resto del lote.
 
 ## Arquitectura
 
@@ -85,7 +104,8 @@ lib/
                  excepción de dominio.
   models/        Configuración, opciones, archivo seleccionado y resultados.
   services/      Procesadores de Excel y Word, inyector de logo, diccionario y
-                 servicio de traducción, acceso a disco y configuración.
+                 servicio de traducción, conversor de `.doc` a `.docx`, acceso a
+                 disco y configuración.
   state/         Controladores ChangeNotifier (ajustes y procesamiento).
   ui/            Shell, páginas y widgets.
 test/            Pruebas con archivos OOXML sintéticos.
@@ -109,7 +129,19 @@ flutter analyze
 Las pruebas construyen libros y documentos sintéticos (incluido un PNG válido
 generado en memoria) y verifican la traducción, la marca, la inyección del logo,
 la validez del XML de todas las partes y el manejo de errores. No requieren
-Office ni archivos externos.
+Office ni archivos externos: la conversión de `.doc` se prueba con un conversor
+falso.
+
+Para validar la conversión real con Word COM (crea un `.doc` con Word, lo
+convierte y comprueba que el original no cambie):
+
+```powershell
+$env:RUN_WORD_COM_TEST='1'
+flutter test test/legacy_doc_converter_test.dart
+```
+
+Sin esa variable la prueba integrada se omite, de modo que `flutter test` sigue
+funcionando en equipos sin Word ni LibreOffice.
 
 ## Limitaciones conocidas
 

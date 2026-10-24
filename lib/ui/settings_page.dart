@@ -290,9 +290,10 @@ class _SettingsPageState extends State<SettingsPage> {
               icon: Icons.info_outline,
               title: 'Formatos compatibles',
               child: Text(
-                'Se procesan archivos .xlsx y .docx. Los archivos .xls y .doc '
-                'antiguos no se convierten automáticamente: ábrelos en Excel o '
-                'Word y usa "Guardar como…" para generar la versión moderna.',
+                'Se procesan archivos .xlsx y .docx. Los documentos .doc '
+                'antiguos se convierten a .docx automáticamente con Microsoft '
+                'Word o LibreOffice. Los archivos .xls siguen necesitando la '
+                'conversión manual: ábrelos en Excel y usa "Guardar como…".',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                   height: 1.4,

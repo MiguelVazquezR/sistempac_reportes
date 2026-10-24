@@ -22,6 +22,15 @@ class SelectedReport {
 
   bool get isLegacy => FormatUtils.isLegacy(format);
 
+  /// `.doc` antiguo que la aplicación convertirá a `.docx` al procesar.
+  bool get isConvertible => FormatUtils.isConvertible(format);
+
+  /// `.xls` antiguo que el usuario debe convertir manualmente a `.xlsx`.
+  bool get needsManualConversion => FormatUtils.needsManualConversion(format);
+
+  /// Puede procesarse tal cual o tras la conversión automática a `.docx`.
+  bool get isProcessable => FormatUtils.isProcessable(format);
+
   String get readableSize => FormatUtils.formatFileSize(sizeBytes);
 
   String get directory => p.dirname(path);

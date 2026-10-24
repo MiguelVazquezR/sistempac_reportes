@@ -159,6 +159,13 @@ class _ResultCard extends StatelessWidget {
                     color: AppTheme.warning,
                   ),
                 ],
+                if (result.isSuccess && result.convertedFromLegacy) ...[
+                  const SizedBox(width: 6),
+                  const _MiniChip(
+                    label: 'convertido de .doc',
+                    color: AppTheme.accent,
+                  ),
+                ],
               ],
             ),
             if (result.errorMessage != null) ...[

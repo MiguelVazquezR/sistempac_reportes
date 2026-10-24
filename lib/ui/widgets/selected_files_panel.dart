@@ -91,7 +91,7 @@ class _FileRow extends StatelessWidget {
     final isExcel =
         file.format == ReportFormat.xlsx ||
         file.format == ReportFormat.legacyXls;
-    final Color iconColor = file.isSupported
+    final Color iconColor = file.isProcessable
         ? (isExcel ? AppTheme.success : AppTheme.accent)
         : AppTheme.warning;
 
@@ -132,10 +132,19 @@ class _FileRow extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (file.isConvertible) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Se convertirá a .docx automáticamente.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.accent,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          if (file.isLegacy)
+          if (file.needsManualConversion)
             TextButton(
               onPressed: onLegacyHelp,
               child: const Text('Cómo convertir'),

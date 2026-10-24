@@ -21,6 +21,7 @@ class ProcessingResult {
     this.translatedItems = 0,
     this.untranslatedItems = 0,
     this.warnings = const [],
+    this.convertedFromLegacy = false,
     this.errorCode,
     this.errorMessage,
     this.errorHint,
@@ -39,6 +40,10 @@ class ProcessingResult {
   final int untranslatedItems;
 
   final List<String> warnings;
+
+  /// Indica que el reporte se generó a partir de un `.doc` convertido a `.docx`.
+  final bool convertedFromLegacy;
+
   final String? errorCode;
   final String? errorMessage;
   final String? errorHint;
@@ -57,6 +62,7 @@ class ProcessingResult {
     int? translatedItems,
     int? untranslatedItems,
     List<String>? warnings,
+    bool? convertedFromLegacy,
     String? errorCode,
     String? errorMessage,
     String? errorHint,
@@ -70,6 +76,7 @@ class ProcessingResult {
       translatedItems: translatedItems ?? this.translatedItems,
       untranslatedItems: untranslatedItems ?? this.untranslatedItems,
       warnings: warnings ?? this.warnings,
+      convertedFromLegacy: convertedFromLegacy ?? this.convertedFromLegacy,
       errorCode: errorCode ?? this.errorCode,
       errorMessage: errorMessage ?? this.errorMessage,
       errorHint: errorHint ?? this.errorHint,

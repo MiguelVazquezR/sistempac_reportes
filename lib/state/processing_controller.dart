@@ -3,12 +3,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../core/format_utils.dart';
 import '../core/report_processing_exception.dart';
 import '../models/app_settings.dart';
 import '../models/processing_options.dart';
 import '../models/processing_result.dart';
 import '../models/selected_report.dart';
 import '../services/file_service.dart';
+import '../services/legacy_doc_converter.dart';
 import '../services/report_processor.dart';
 
 /// Orquesta la selección de archivos, el procesamiento y el guardado.
@@ -16,11 +18,14 @@ class ProcessingController extends ChangeNotifier {
   ProcessingController({
     FileService? fileService,
     ReportProcessor? reportProcessor,
+    LegacyDocConverter? legacyDocConverter,
   }) : _fileService = fileService ?? FileService(),
-       _processor = reportProcessor ?? ReportProcessor();
+       _processor = reportProcessor ?? ReportProcessor(),
+       _legacyDocConverter = legacyDocConverter ?? const LegacyDocConverter();
 
   final FileService _fileService;
   final ReportProcessor _processor;
+  final LegacyDocConverter _legacyDocConverter;
 
   final List<SelectedReport> _files = [];
   final List<ProcessingResult> _results = [];
@@ -43,9 +48,18 @@ class ProcessingController extends ChangeNotifier {
 
   bool get hasFiles => _files.isNotEmpty;
 
-  int get supportedCount => _files.where((file) => file.isSupported).length;
+  /// Archivos que el lote puede procesar: `.xlsx`/`.docx` directos y `.doc`
+  /// que se convierten automáticamente a `.docx` antes de procesarse.
+  int get supportedCount => _files.where((file) => file.isProcessable).length;
 
   int get legacyCount => _files.where((file) => file.isLegacy).length;
+
+  /// Archivos `.doc` que se convertirán automáticamente a `.docx`.
+  int get convertibleCount => _files.where((file) => file.isConvertible).length;
+
+  /// Archivos `.xls` que el usuario debe convertir manualmente a `.xlsx`.
+  int get manualConversionCount =>
+      _files.where((file) => file.needsManualConversion).length;
 
   bool get canProcess => hasFiles && !_isProcessing && supportedCount > 0;
 
@@ -147,14 +161,31 @@ class ProcessingController extends ChangeNotifier {
 
     for (var index = 0; index < _files.length; index++) {
       final file = _files[index];
-      _statusMessage =
-          'Procesando ${index + 1} de ${_files.length}: ${file.name}';
+      _statusMessage = file.isConvertible
+          ? 'Convirtiendo ${index + 1} de ${_files.length} a .docx: ${file.name}'
+          : 'Procesando ${index + 1} de ${_files.length}: ${file.name}';
       notifyListeners();
 
+      var convertedFromLegacy = false;
       try {
-        final bytes = await _fileService.readBytes(file.path);
+        final Uint8List bytes;
+        if (file.isConvertible) {
+          bytes = await _legacyDocConverter.convert(
+            sourcePath: file.path,
+            fileName: file.name,
+          );
+          convertedFromLegacy = true;
+          _statusMessage =
+              'Procesando ${index + 1} de ${_files.length}: ${file.name}';
+          notifyListeners();
+        } else {
+          bytes = await _fileService.readBytes(file.path);
+        }
+
         final processed = _processor.process(
-          file: file,
+          file: convertedFromLegacy
+              ? file.copyWith(format: ReportFormat.docx)
+              : file,
           options: options,
           bytes: bytes,
         );
@@ -178,6 +209,7 @@ class ProcessingController extends ChangeNotifier {
             translatedItems: processed.translatedItems,
             untranslatedItems: processed.untranslatedItems,
             warnings: warnings,
+            convertedFromLegacy: convertedFromLegacy,
           ),
         );
       } on ReportProcessingException catch (error) {
@@ -306,6 +338,14 @@ class ProcessingController extends ChangeNotifier {
     );
     if (failed > 0) {
       buffer.write(' · $failed con error');
+    }
+    final converted = _results
+        .where((result) => result.convertedFromLegacy && result.isSuccess)
+        .length;
+    if (converted > 0) {
+      buffer.write(
+        ' · $converted convertido${converted == 1 ? '' : 's'} de .doc',
+      );
     }
     if (translated > 0) {
       buffer.write(' · $translated textos traducidos');

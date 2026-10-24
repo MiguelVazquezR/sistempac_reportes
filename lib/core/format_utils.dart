@@ -11,7 +11,7 @@ enum ReportFormat {
   /// Libro de Excel 97-2003 (OLE). Requiere conversión manual.
   legacyXls,
 
-  /// Documento de Word 97-2003 (OLE). Requiere conversión manual.
+  /// Documento de Word 97-2003 (OLE). Se convierte a `.docx` automáticamente.
   legacyDoc,
 
   /// Formato no soportado o desconocido.
@@ -116,6 +116,21 @@ abstract final class FormatUtils {
   static bool isSupported(ReportFormat format) =>
       format == ReportFormat.xlsx || format == ReportFormat.docx;
 
+  /// Formatos antiguos que la aplicación convierte automáticamente.
+  ///
+  /// Sólo `.doc` puede convertirse a `.docx` con Word o LibreOffice; `.xls`
+  /// sigue requiriendo la conversión manual desde Excel.
+  static bool isConvertible(ReportFormat format) =>
+      format == ReportFormat.legacyDoc;
+
+  /// Formatos antiguos que el usuario debe convertir por su cuenta.
+  static bool needsManualConversion(ReportFormat format) =>
+      format == ReportFormat.legacyXls;
+
+  /// Formatos que el lote puede procesar (directamente o tras convertir).
+  static bool isProcessable(ReportFormat format) =>
+      isSupported(format) || isConvertible(format);
+
   /// Nombre legible del formato para mensajes de la interfaz.
   static String label(ReportFormat format) {
     switch (format) {
@@ -133,11 +148,16 @@ abstract final class FormatUtils {
   }
 
   /// Extensión de salida esperada (con punto) para un formato soportado.
+  ///
+  /// Los documentos `.doc` se convierten a `.docx` antes de procesarse, por lo
+  /// que su resultado también es un `.docx`.
   static String outputExtension(ReportFormat format) {
     switch (format) {
       case ReportFormat.docx:
+      case ReportFormat.legacyDoc:
         return '.docx';
       case ReportFormat.xlsx:
+      case ReportFormat.legacyXls:
       default:
         return '.xlsx';
     }

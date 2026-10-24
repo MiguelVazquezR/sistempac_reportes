@@ -12,6 +12,13 @@ Future<void> showLegacyFormatDialog(
   final isWord = format == ReportFormat.legacyDoc;
   final application = isWord ? 'Word' : 'Excel';
   final targetExtension = isWord ? '.docx' : '.xlsx';
+  final description = isWord
+      ? 'Los documentos .doc se convierten a .docx automáticamente al generar '
+            'los reportes. Si la conversión falla, guarda una copia con estos '
+            'pasos y arrástrala de nuevo.'
+      : 'Este archivo es un ${FormatUtils.label(format)} y no se puede '
+            'convertir automáticamente. Conviértelo una vez y el optimizador '
+            'conservará todo el formato.';
   final steps = <String>[
     'Abre "$fileName" en $application.',
     'Entra en Archivo → Guardar como (o "Guardar una copia").',
@@ -44,12 +51,7 @@ Future<void> showLegacyFormatDialog(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Este archivo es un ${FormatUtils.label(format)} y no se puede '
-                'convertir automáticamente. Conviértelo una vez y el '
-                'optimizador conservará todo el formato.',
-                style: theme.textTheme.bodyMedium,
-              ),
+              Text(description, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 16),
               for (var index = 0; index < steps.length; index++)
                 Padding(

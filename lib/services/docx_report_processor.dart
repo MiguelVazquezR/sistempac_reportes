@@ -40,6 +40,103 @@ class DocxReportProcessor {
   static const double _maxLogoHeightPixels = 80;
   static const int _emuPerPixel = 9525;
 
+  static const String _reportTitle = 'Reporte de ensayo';
+
+  static final RegExp _folioPattern = RegExp(
+    r'^[A-Za-z]{2,8}[-_ ]?\d{2,}(?:[-_][A-Za-z0-9]+)*$',
+  );
+
+  static const Set<String> _reportTitleVariants = {
+    'reporte de ensayo',
+    'reporte de ensayo de traccion',
+    'reporte de ensayo de tracción',
+    'reporte de prueba',
+    'reporte de prueba de tension',
+    'reporte de prueba de tensión',
+    'reporte de prueba de traccion',
+    'reporte de prueba de tracción',
+    'reporte de tension',
+    'reporte de tensión',
+    'reporte de traccion',
+    'reporte de tracción',
+    'reporte de inspeccion',
+    'reporte de inspección',
+    'reporte de inspeccion de calidad',
+    'reporte de inspección de calidad',
+    'tensile test report',
+    'tension test report',
+    'test report',
+    'material test report',
+    'inspection report',
+    'quality inspection report',
+    '试验报告',
+    '测试报告',
+    '拉伸试验报告',
+    '拉力试验报告',
+    '拉伸测试报告',
+    '拉力测试报告',
+    '检测报告',
+    '检验报告',
+    '品质检验报告',
+    '材料试验报告',
+    '材料测试报告',
+  };
+
+  static const Map<String, String> _templateLabels = {
+    'test type': 'Tipo de prueba',
+    'tipo de prueba': 'Tipo de prueba',
+    'tipo de ensayo': 'Tipo de prueba',
+    '测试类型': 'Tipo de prueba',
+    '试验类型': 'Tipo de prueba',
+    'mat.name': 'Nombre material',
+    'mat. name': 'Nombre material',
+    'material name': 'Nombre material',
+    'nombre material': 'Nombre material',
+    'nombre de material': 'Nombre material',
+    'nombre del material': 'Nombre material',
+    '材料名称': 'Nombre material',
+    'mat.type': 'Tipo material',
+    'mat. type': 'Tipo material',
+    'material type': 'Tipo material',
+    'tipo material': 'Tipo material',
+    'tipo de material': 'Tipo material',
+    '材料类型': 'Tipo material',
+    'test for': 'Prueba para',
+    'prueba para': 'Prueba para',
+    '测试用途': 'Prueba para',
+    '试验用途': 'Prueba para',
+    'humi': 'Humedad',
+    'humedad': 'Humedad',
+    '湿度': 'Humedad',
+    'lo': 'Longitud',
+    'longitud': 'Longitud',
+    '长度': 'Longitud',
+    'comment': 'Comentario',
+    'comments': 'Comentarios',
+    'comentario': 'Comentario',
+    'comentarios': 'Comentarios',
+    '备注': 'Comentario',
+    '说明': 'Comentario',
+  };
+
+  static const Set<String> _signatureLabels = {
+    'assessor',
+    'evaluador',
+    'ratifier',
+    'ratificador',
+    'test person',
+    'technician',
+    'tester',
+    'inspector',
+    'técnico de prueba',
+    'técnico de pruebas',
+    'técnico de ensayo',
+    'persona de prueba',
+    '检验员',
+    '测试员',
+    '试验员',
+  };
+
   ProcessedReport process({
     required List<int> bytes,
     required String fileName,
@@ -87,6 +184,8 @@ class DocxReportProcessor {
         untranslatedItems += stats.untranslated;
       }
     }
+
+    _normalizeReportLayout(package);
 
     var headerPlaced = false;
     var logoPlaced = false;
@@ -197,7 +296,7 @@ class DocxReportProcessor {
     'sym',
   };
 
-  bool _hasStructuralContent(XmlElement paragraph) {
+  static bool _hasStructuralContent(XmlElement paragraph) {
     return paragraph.descendantElements.any(
       (element) => _protectedElements.contains(element.name.local),
     );
@@ -208,6 +307,639 @@ class DocxReportProcessor {
       ..clear()
       ..add(XmlText(text));
     node.setAttribute('xml:space', 'preserve');
+  }
+
+  /// Corrige la plantilla del reporte: encabezado, etiquetas y espacios.
+  void _normalizeReportLayout(OoxmlPackage package) {
+    final document = package.readXml(documentPart);
+    if (document == null) {
+      return;
+    }
+
+    final infoTable = _findInfoTable(document);
+    if (infoTable == null) {
+      return;
+    }
+    final templateTable = _topLevelTableOf(infoTable);
+    if (templateTable == null) {
+      return;
+    }
+
+    var changed = false;
+    final title = _findTemplateTitle(templateTable, infoTable);
+    changed |= _removeSpecialTemplateRows(
+      templateTable,
+      infoTable: infoTable,
+      title: title,
+    );
+    changed |= _clearSignatureLabels(templateTable);
+
+    if (title != null) {
+      changed |= _replaceParagraphText(title, _reportTitle);
+      changed |= _removeRowsBetweenTitleAndInfo(title, infoTable);
+    }
+
+    changed |= _replaceTemplateLabels(templateTable);
+    changed |= _trimResultRows(templateTable);
+
+    if (changed) {
+      package.writeText(documentPart, document.toXmlString());
+    }
+  }
+
+  static XmlElement? _findInfoTable(XmlDocument document) {
+    final candidates = document.descendantElements
+        .where(
+          (element) => element.name.local == 'tbl' && _isInfoTable(element),
+        )
+        .toList(growable: false);
+    if (candidates.isEmpty) {
+      return null;
+    }
+    final sorted = candidates.toList(growable: false)
+      ..sort(
+        (left, right) => left.descendantElements.length.compareTo(
+          right.descendantElements.length,
+        ),
+      );
+    return sorted.first;
+  }
+
+  static bool _isInfoTable(XmlElement table) {
+    final text = _normalizeLabel(_elementText(table));
+    final hasType =
+        text.contains('test type') ||
+        text.contains('tipo de prueba') ||
+        text.contains('tipo de ensayo') ||
+        text.contains('测试类型') ||
+        text.contains('试验类型');
+    final hasMaterial =
+        text.contains('mat.name') ||
+        text.contains('mat. name') ||
+        text.contains('material name') ||
+        text.contains('nombre material') ||
+        text.contains('nombre de material') ||
+        text.contains('nombre del material') ||
+        text.contains('材料名称') ||
+        text.contains('mat.type') ||
+        text.contains('mat. type') ||
+        text.contains('material type') ||
+        text.contains('tipo material') ||
+        text.contains('tipo de material') ||
+        text.contains('材料类型');
+    return hasType && hasMaterial;
+  }
+
+  /// Tabla superior que contiene [element], aunque esté dentro de tablas
+  /// anidadas. Devuelve `null` si el elemento no está dentro de una tabla.
+  static XmlElement? _topLevelTableOf(XmlElement element) {
+    XmlElement? top;
+    XmlNode? current = element;
+    while (current != null) {
+      if (current is XmlElement && current.name.local == 'tbl') {
+        top = current;
+      }
+      current = current.parent;
+    }
+    return top;
+  }
+
+  /// Fila de la tabla superior que contiene [element].
+  static XmlElement? _topLevelRowOf(XmlElement element) {
+    XmlNode? current = element;
+    while (current != null) {
+      if (current is XmlElement && current.name.local == 'tr') {
+        final parent = current.parent;
+        if (parent is XmlElement &&
+            parent.name.local == 'tbl' &&
+            _topLevelTableOf(parent) == parent) {
+          return current;
+        }
+      }
+      current = current.parent;
+    }
+    return null;
+  }
+
+  static List<XmlElement> _directChildren(XmlElement parent, String localName) {
+    return parent.children
+        .whereType<XmlElement>()
+        .where((element) => element.name.local == localName)
+        .toList(growable: false);
+  }
+
+  static String _elementText(XmlElement element) {
+    return element.descendantElements
+        .where((child) => child.name.local == 't')
+        .map((child) => child.innerText)
+        .join();
+  }
+
+  static String _normalizeLabel(String value) {
+    return value
+        .replaceAll('\u00A0', ' ')
+        .replaceAll('\u3000', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toLowerCase()
+        .replaceFirst(RegExp(r'[:：]\s*$'), '')
+        .trim();
+  }
+
+  static List<String> _rowCellTexts(XmlElement row) {
+    return _directChildren(row, 'tc')
+        .map((cell) => _elementText(cell).trim())
+        .where((text) => text.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static bool _rowHasVisibleContent(XmlElement row) {
+    if (_elementText(row).trim().isNotEmpty) {
+      return true;
+    }
+    return row.descendantElements.any(
+      (element) =>
+          element.name.local == 'drawing' ||
+          element.name.local == 'pict' ||
+          element.name.local == 'object',
+    );
+  }
+
+  static bool _isFolioText(String text) {
+    final trimmed = text.trim();
+    return trimmed.isNotEmpty &&
+        trimmed.length <= 32 &&
+        _folioPattern.hasMatch(trimmed);
+  }
+
+  static bool _isSignatureText(String text) {
+    final normalized = _normalizeLabel(text);
+    final label = normalized.split(RegExp(r'[:：]')).first.trim();
+    return _signatureLabels.contains(label);
+  }
+
+  bool _removeSpecialTemplateRows(
+    XmlElement templateTable, {
+    required XmlElement infoTable,
+    required XmlElement? title,
+  }) {
+    var changed = false;
+    final rows = _directChildren(templateTable, 'tr');
+    final titleRow = title == null ? null : _topLevelRowOf(title);
+    final infoRow = _topLevelRowOf(infoTable);
+    final titleIndex = titleRow == null ? -1 : rows.indexOf(titleRow);
+    final infoIndex = infoRow == null ? -1 : rows.indexOf(infoRow);
+
+    for (var index = 0; index < rows.length; index++) {
+      final row = rows[index];
+      final texts = _rowCellTexts(row);
+      if (texts.isEmpty) {
+        continue;
+      }
+      final allFolio =
+          texts.every(_isFolioText) && (titleIndex < 0 || index < titleIndex);
+      final allSignature =
+          texts.every(_isSignatureText) && (infoIndex < 0 || index > infoIndex);
+      if (!allFolio && !allSignature) {
+        continue;
+      }
+      if (_removeRowAndEmptyMerges(row)) {
+        changed = true;
+      } else if (_clearRowContent(row)) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /// Columnas (por índice de celda) que reinician una combinación vertical.
+  static Set<int> _verticalMergeColumns(
+    XmlElement row, {
+    required bool restart,
+  }) {
+    final columns = <int>{};
+    final cells = _directChildren(row, 'tc');
+    for (var index = 0; index < cells.length; index++) {
+      final properties = _directChildren(cells[index], 'tcPr');
+      if (properties.isEmpty) {
+        continue;
+      }
+      final merges = _directChildren(properties.first, 'vMerge');
+      if (merges.isEmpty) {
+        continue;
+      }
+      String? value;
+      for (final attribute in merges.first.attributes) {
+        if (attribute.name.local == 'val' &&
+            attribute.name.namespaceUri == _wNs) {
+          value = attribute.value;
+          break;
+        }
+      }
+      final isRestart = value == 'restart';
+      if ((restart && isRestart) || (!restart && !isRestart)) {
+        columns.add(index);
+      }
+    }
+    return columns;
+  }
+
+  static List<XmlElement>? _followingEmptyMergeContinuations(
+    List<XmlElement> rows,
+    int index,
+    Set<int> restartColumns,
+  ) {
+    final result = <XmlElement>[];
+    for (var next = index + 1; next < rows.length; next++) {
+      final continuation = _verticalMergeColumns(rows[next], restart: false);
+      final shared = continuation.intersection(restartColumns);
+      if (shared.isEmpty) {
+        break;
+      }
+      if (!restartColumns.every(continuation.contains)) {
+        return null;
+      }
+      if (_rowHasVisibleContent(rows[next])) {
+        return null;
+      }
+      result.add(rows[next]);
+    }
+    return result;
+  }
+
+  static bool _removeRow(XmlElement row) {
+    final parent = row.parent;
+    if (parent is! XmlElement || parent.name.local != 'tbl') {
+      return false;
+    }
+    final rows = _directChildren(parent, 'tr');
+    if (rows.length <= 1) {
+      return false;
+    }
+    parent.children.remove(row);
+    return true;
+  }
+
+  /// Elimina la fila y sus filas de continuación `vMerge` vacías.
+  static bool _removeRowAndEmptyMerges(XmlElement row) {
+    final parent = row.parent;
+    if (parent is! XmlElement || parent.name.local != 'tbl') {
+      return false;
+    }
+    final rows = _directChildren(parent, 'tr');
+    final index = rows.indexOf(row);
+    if (index < 0 || rows.length <= 1) {
+      return false;
+    }
+
+    final toRemove = <XmlElement>[row];
+    final restartColumns = _verticalMergeColumns(row, restart: true);
+    if (restartColumns.isNotEmpty) {
+      final continuations = _followingEmptyMergeContinuations(
+        rows,
+        index,
+        restartColumns,
+      );
+      if (continuations == null) {
+        return false;
+      }
+      toRemove.addAll(continuations);
+    }
+    if (rows.length - toRemove.length < 1) {
+      return false;
+    }
+    for (final target in toRemove) {
+      parent.children.remove(target);
+    }
+    return true;
+  }
+
+  static bool _canRemoveFromParent(XmlElement element) {
+    final parent = element.parent;
+    if (parent is! XmlElement) {
+      return false;
+    }
+    if (parent.name.local != 'tc') {
+      return true;
+    }
+    return _directChildren(parent, 'p').isNotEmpty;
+  }
+
+  static bool _clearParagraphText(XmlElement paragraph) {
+    var changed = false;
+    final textNodes = paragraph.descendantElements
+        .where((element) => element.name.local == 't')
+        .toList(growable: false);
+    for (final node in textNodes) {
+      if (node.innerText.isNotEmpty) {
+        _setNodeText(node, '');
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  static bool _clearRowContent(XmlElement row) {
+    var changed = false;
+    final visuals = row.descendantElements
+        .where(
+          (element) =>
+              element.name.local == 'drawing' ||
+              element.name.local == 'pict' ||
+              element.name.local == 'object',
+        )
+        .toList(growable: false);
+    for (final visual in visuals) {
+      if (_canRemoveFromParent(visual)) {
+        visual.parent?.children.remove(visual);
+        changed = true;
+      }
+    }
+    final nestedTables = row.descendantElements
+        .where((element) => element.name.local == 'tbl')
+        .toList(growable: false);
+    for (final table in nestedTables) {
+      if (_canRemoveFromParent(table)) {
+        table.parent?.children.remove(table);
+        changed = true;
+      }
+    }
+    final paragraphs = row.descendantElements
+        .where((element) => element.name.local == 'p')
+        .toList(growable: false);
+    for (final paragraph in paragraphs) {
+      if (_clearParagraphText(paragraph)) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  bool _clearSignatureLabels(XmlElement templateTable) {
+    var changed = false;
+    final rows = _directChildren(templateTable, 'tr');
+    for (final row in rows) {
+      final texts = _rowCellTexts(row);
+      if (texts.isEmpty) {
+        continue;
+      }
+      final allSignature = texts.every(_isSignatureText);
+      if (allSignature && _clearRowContent(row)) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  static bool _replaceParagraphText(XmlElement paragraph, String replacement) {
+    final textNodes = paragraph.descendantElements
+        .where((element) => element.name.local == 't')
+        .toList(growable: false);
+    if (textNodes.isEmpty) {
+      return false;
+    }
+    final current = textNodes.map((node) => node.innerText).join();
+    if (current == replacement) {
+      return false;
+    }
+    _setNodeText(textNodes.first, replacement);
+    for (final node in textNodes.skip(1)) {
+      _setNodeText(node, '');
+    }
+    return true;
+  }
+
+  /// Primer párrafo con un título conocido antes de la tabla de información.
+  static XmlElement? _findTemplateTitle(
+    XmlElement templateTable,
+    XmlElement infoTable,
+  ) {
+    final paragraphs = templateTable.descendantElements
+        .where((element) => element.name.local == 'p')
+        .toList(growable: false);
+    final infoParagraphs = infoTable.descendantElements
+        .where((element) => element.name.local == 'p')
+        .toList(growable: false);
+    if (infoParagraphs.isEmpty) {
+      return null;
+    }
+    final infoStart = paragraphs.indexOf(infoParagraphs.first);
+    if (infoStart < 0) {
+      return null;
+    }
+    for (var index = 0; index < infoStart; index++) {
+      final paragraph = paragraphs[index];
+      if (_hasStructuralContent(paragraph)) {
+        continue;
+      }
+      final normalized = _normalizeLabel(_elementText(paragraph));
+      if (_reportTitleVariants.contains(normalized)) {
+        return paragraph;
+      }
+    }
+    return null;
+  }
+
+  /// Elimina las filas con texto entre el título y la tabla de información.
+  static bool _removeRowsBetweenTitleAndInfo(
+    XmlElement titleParagraph,
+    XmlElement infoTable,
+  ) {
+    final titleRow = _topLevelRowOf(titleParagraph);
+    final infoRow = _topLevelRowOf(infoTable);
+    if (titleRow == null ||
+        infoRow == null ||
+        titleRow.parent != infoRow.parent) {
+      return false;
+    }
+    final table = titleRow.parent;
+    if (table is! XmlElement) {
+      return false;
+    }
+    final rows = _directChildren(table, 'tr');
+    final start = rows.indexOf(titleRow);
+    final end = rows.indexOf(infoRow);
+    if (start < 0 || end <= start) {
+      return false;
+    }
+
+    var changed = false;
+    for (var index = end - 1; index > start; index--) {
+      final row = rows[index];
+      final hasText = _rowCellTexts(row).isNotEmpty;
+      final hasVisible = _rowHasVisibleContent(row);
+      if (!hasText && hasVisible) {
+        continue;
+      }
+      if (_removeRowAndEmptyMerges(row)) {
+        changed = true;
+      } else if (hasText && _clearRowContent(row)) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  bool _replaceTemplateLabels(XmlElement templateTable) {
+    var changed = false;
+    final paragraphs = templateTable.descendantElements
+        .where((element) => element.name.local == 'p')
+        .toList(growable: false);
+    for (final paragraph in paragraphs) {
+      if (_hasStructuralContent(paragraph)) {
+        continue;
+      }
+      final text = _elementText(paragraph);
+      final trimmed = text.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      final hasColon = RegExp(r'[:：]\s*$').hasMatch(trimmed);
+      final replacement = _templateLabels[_normalizeLabel(trimmed)];
+      if (replacement == null) {
+        continue;
+      }
+      final desired = hasColon ? '$replacement:' : replacement;
+      if (_replaceParagraphText(paragraph, desired)) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  static bool _isResultsTable(XmlElement table) {
+    final rows = _directChildren(table, 'tr');
+    if (rows.length < 2) {
+      return false;
+    }
+    final header = _normalizeLabel(_elementText(rows.first));
+    final hasNumber =
+        header.contains('num') ||
+        header.contains('no.') ||
+        header.contains('n.º') ||
+        header.contains('序号') ||
+        header.contains('编号');
+    if (!hasNumber) {
+      return false;
+    }
+    final hasMetric =
+        header.contains('area') ||
+        header.contains('área') ||
+        header.contains('面积') ||
+        header.contains('fmax') ||
+        header.contains('stress') ||
+        header.contains('esfuerzo') ||
+        header.contains('elong') ||
+        header.contains('alargamiento') ||
+        header.contains('伸长') ||
+        header.contains('lmax') ||
+        header.contains('截面积') ||
+        header.contains('最大力') ||
+        header.contains('强度') ||
+        header.contains('拉力');
+    return hasMetric || _directChildren(rows.first, 'tc').length >= 3;
+  }
+
+  static XmlElement? _findStatsTable(XmlElement templateTable) {
+    final tables = templateTable.descendantElements
+        .where((element) => element.name.local == 'tbl')
+        .toList(growable: false);
+    for (final table in tables) {
+      final rows = _directChildren(table, 'tr');
+      if (rows.length < 2) {
+        continue;
+      }
+      final header = _normalizeLabel(_elementText(rows.first));
+      if (header.contains('avg') ||
+          header.contains('average') ||
+          header.contains('mean') ||
+          header.contains('media') ||
+          header.contains('promedio') ||
+          header.contains('平均')) {
+        return table;
+      }
+    }
+    return null;
+  }
+
+  static bool _trimTrailingEmptyRows(XmlElement table) {
+    final rows = _directChildren(table, 'tr');
+    if (rows.length <= 1) {
+      return false;
+    }
+    var lastWithContent = rows.length - 1;
+    while (lastWithContent >= 1 &&
+        !_rowHasVisibleContent(rows[lastWithContent])) {
+      lastWithContent--;
+    }
+    if (lastWithContent == rows.length - 1) {
+      return false;
+    }
+    var changed = false;
+    for (var index = rows.length - 1; index > lastWithContent; index--) {
+      if (_removeRow(rows[index])) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  static bool _removeEmptyRowsBetween(
+    XmlElement resultsTable,
+    XmlElement statsTable,
+  ) {
+    final resultsRow = _topLevelRowOf(resultsTable);
+    final statsRow = _topLevelRowOf(statsTable);
+    if (resultsRow == null || statsRow == null) {
+      return false;
+    }
+    final parent = resultsRow.parent;
+    if (parent is! XmlElement ||
+        parent.name.local != 'tbl' ||
+        statsRow.parent != parent) {
+      return false;
+    }
+    final rows = _directChildren(parent, 'tr');
+    final start = rows.indexOf(resultsRow);
+    final end = rows.indexOf(statsRow);
+    if (start < 0 || end <= start) {
+      return false;
+    }
+    var changed = false;
+    for (var index = end - 1; index > start; index--) {
+      final row = rows[index];
+      if (_rowHasVisibleContent(row)) {
+        continue;
+      }
+      if (_removeRowAndEmptyMerges(row)) {
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  bool _trimResultRows(XmlElement templateTable) {
+    var changed = false;
+    final resultsTables = templateTable.descendantElements
+        .where(
+          (element) => element.name.local == 'tbl' && _isResultsTable(element),
+        )
+        .toList(growable: false);
+    for (final table in resultsTables) {
+      if (_trimTrailingEmptyRows(table)) {
+        changed = true;
+      }
+    }
+    final statsTable = _findStatsTable(templateTable);
+    if (statsTable == null) {
+      return changed;
+    }
+    for (final resultsTable in resultsTables) {
+      if (_removeEmptyRowsBetween(resultsTable, statsTable)) {
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   /// Encabezado donde se estampa la marca, o el cuerpo si no existe.

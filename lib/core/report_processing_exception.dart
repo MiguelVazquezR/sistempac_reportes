@@ -11,6 +11,9 @@ enum ReportErrorCode {
   /// manualmente a .xlsx/.docx.
   legacyNeedsConversion,
 
+  /// No fue posible convertir un `.doc` a `.docx` con Word ni con LibreOffice.
+  conversionFailed,
+
   /// El archivo está dañado o no es un paquete OOXML válido.
   corruptFile,
 
@@ -61,6 +64,7 @@ class ReportProcessingException implements Exception {
   /// Indica si el usuario puede corregir el problema sin soporte técnico.
   bool get isRecoverable =>
       code == ReportErrorCode.legacyNeedsConversion ||
+      code == ReportErrorCode.conversionFailed ||
       code == ReportErrorCode.saveCancelled ||
       code == ReportErrorCode.unsupportedFormat;
 

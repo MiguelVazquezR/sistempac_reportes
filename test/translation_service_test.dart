@@ -16,6 +16,19 @@ void main() {
       expect(service.translate('Test Report').text, 'Reporte de prueba');
     });
 
+    test('traduce las etiquetas de la plantilla de reporte', () {
+      expect(service.translate('Test Type').text, 'Tipo de prueba');
+      expect(service.translate('Mat.Name').text, 'Nombre material');
+      expect(service.translate('Mat.Type').text, 'Tipo material');
+      expect(service.translate('Test For').text, 'Prueba para');
+      expect(service.translate('Humi').text, 'Humedad');
+      expect(service.translate('comment:').text, 'Comentario:');
+      expect(service.translate('测试类型').text, 'Tipo de prueba');
+      expect(service.translate('材料名称').text, 'Nombre material');
+      expect(service.translate('材料类型').text, 'Tipo material');
+      expect(service.translate('测试用途').text, 'Prueba para');
+    });
+
     test('conserva el valor posterior a los dos puntos', () {
       final outcome = service.translate('测试日期：2024-05-01');
       expect(outcome.changed, isTrue);

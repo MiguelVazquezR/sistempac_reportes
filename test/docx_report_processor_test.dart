@@ -4,6 +4,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reportes_sistempac/models/processing_options.dart';
 import 'package:reportes_sistempac/services/docx_report_processor.dart';
+import 'package:xml/xml.dart';
 
 import 'helpers/test_fixtures.dart';
 
@@ -142,5 +143,137 @@ void main() {
     expect(body, contains('测试报告'));
     expect(body, contains('Report No.: 42'));
     expect(body, isNot(contains('<w:drawing>')));
+  });
+
+  test('corrige etiquetas de la plantilla aun sin traducir', () {
+    final result = DocxReportProcessor().process(
+      bytes: buildReportTemplateDocx(),
+      fileName: 'plantilla.docx',
+      options: const ProcessingOptions(
+        translateContent: false,
+        addBranding: false,
+      ),
+    );
+
+    expect(result.translatedItems, 0);
+    final archive = ZipDecoder().decodeBytes(result.bytes);
+    final body = partText(archive, 'word/document.xml');
+    expect(body, contains('Tipo de prueba'));
+    expect(body, contains('Nombre material'));
+    expect(body, contains('Tipo material'));
+    expect(body, contains('Prueba para'));
+    expect(body, contains('Humedad'));
+    expect(body, contains('Longitud'));
+    expect(body, contains('Comentario:'));
+    expect(body, isNot(contains('Test Type')));
+    expect(body, isNot(contains('Mat.Name')));
+    expect(body, isNot(contains('TLG001')));
+    expect(malformedXmlParts(result.bytes), isEmpty);
+  });
+
+  test('normaliza un título alterno y elimina el subtítulo duplicado', () {
+    final result = DocxReportProcessor().process(
+      bytes: buildReportTemplateDocx(title: 'Reporte de prueba de tensión'),
+      fileName: 'plantilla.docx',
+      options: const ProcessingOptions(addBranding: false),
+    );
+
+    final archive = ZipDecoder().decodeBytes(result.bytes);
+    final body = partText(archive, 'word/document.xml');
+    expect('Reporte de ensayo'.allMatches(body).length, 1);
+    expect(body, isNot(contains('>Reporte de prueba de tensión<')));
+    expect(malformedXmlParts(result.bytes), isEmpty);
+  });
+
+  test('normaliza la plantilla: título, etiquetas y filas vacías', () {
+    final result = DocxReportProcessor().process(
+      bytes: buildReportTemplateDocx(),
+      fileName: 'plantilla.docx',
+      options: const ProcessingOptions(addBranding: false),
+    );
+
+    final archive = ZipDecoder().decodeBytes(result.bytes);
+    final body = partText(archive, 'word/document.xml');
+    final document = XmlDocument.parse(body);
+
+    expect('Reporte de ensayo'.allMatches(body).length, 1);
+    expect(body, isNot(contains('TLG001')));
+    expect(body, isNot(contains('>Material<')));
+    expect(body, isNot(contains('>Reporte de prueba de tensión<')));
+    expect(body, contains('Tipo de prueba'));
+    expect(body, contains('Nombre material'));
+    expect(body, contains('Tipo material'));
+    expect(body, contains('Prueba para'));
+    expect(body, contains('Humedad'));
+    expect(body, contains('Longitud'));
+    expect(body, contains('Comentario:'));
+    expect(body, isNot(contains('Test Type')));
+    expect(body, isNot(contains('Mat.Name')));
+    expect(body, isNot(contains('Mat.Type')));
+    expect(body, isNot(contains('Test For')));
+    expect(body, isNot(contains('Humi')));
+    expect(body, isNot(contains('>Lo<')));
+    expect(body, isNot(contains('comment:')));
+    expect(body, isNot(contains('assessor')));
+    expect(body, isNot(contains('ratifier')));
+    expect(body, isNot(contains('test person')));
+    expect(body, contains('<w:pict/>'));
+
+    String tableText(XmlElement element) => element.descendantElements
+        .where((child) => child.name.local == 't')
+        .map((child) => child.innerText)
+        .join();
+
+    final tables = document.descendantElements
+        .where((element) => element.name.local == 'tbl')
+        .toList(growable: false);
+    final resultCandidates =
+        tables
+            .where(
+              (table) =>
+                  tableText(table).contains('21.7') &&
+                  tableText(table).contains('284.6'),
+            )
+            .toList()
+          ..sort(
+            (left, right) => left.descendantElements.length.compareTo(
+              right.descendantElements.length,
+            ),
+          );
+    expect(resultCandidates, isNotEmpty);
+    final resultsTable = resultCandidates.first;
+    final resultsRows = resultsTable.children
+        .whereType<XmlElement>()
+        .where((element) => element.name.local == 'tr')
+        .toList(growable: false);
+    expect(resultsRows, hasLength(2));
+
+    final topTable = tables.first;
+    final topRows = topTable.children
+        .whereType<XmlElement>()
+        .where((element) => element.name.local == 'tr')
+        .toList(growable: false);
+    bool rowHasTable(XmlElement row, bool Function(String) matches) {
+      return row.descendantElements.any(
+        (element) => element.name.local == 'tbl' && matches(tableText(element)),
+      );
+    }
+
+    final resultsRow = topRows.indexWhere(
+      (row) => rowHasTable(
+        row,
+        (text) => text.contains('21.7') && text.contains('284.6'),
+      ),
+    );
+    final statsRow = topRows.indexWhere(
+      (row) => rowHasTable(
+        row,
+        (text) => text.contains('3.94') && text.contains('13.67'),
+      ),
+    );
+    expect(resultsRow, greaterThanOrEqualTo(0));
+    expect(statsRow, greaterThanOrEqualTo(0));
+    expect(statsRow, resultsRow + 1);
+    expect(malformedXmlParts(result.bytes), isEmpty);
   });
 }

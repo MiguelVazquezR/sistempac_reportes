@@ -153,6 +153,218 @@ Uint8List buildDocx({
   return zipParts(parts);
 }
 
+String _fixtureText(String text) {
+  return text
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
+}
+
+String _fixtureParagraph(String text) {
+  return '<w:p><w:r><w:t xml:space="preserve">${_fixtureText(text)}</w:t>'
+      '</w:r></w:p>';
+}
+
+String _fixtureCell(String body, {String properties = ''}) {
+  return '<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>$properties'
+      '</w:tcPr>$body</w:tc>';
+}
+
+String _fixtureRow(List<String> cells) => '<w:tr>${cells.join()}</w:tr>';
+
+String _fixtureTable(List<String> rows, {int columns = 6}) {
+  final grid = List<String>.filled(columns, '<w:gridCol w:w="1500"/>').join();
+  return '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+      '<w:tblGrid>$grid</w:tblGrid>${rows.join()}</w:tbl>';
+}
+
+String _emptyFixtureRow(int columns) {
+  return _fixtureRow(
+    List<String>.generate(columns, (_) => _fixtureCell('<w:p/>')),
+  );
+}
+
+/// DOCX con la estructura de la plantilla real: folio, título, subtítulo con
+/// `vMerge`, tabla de información anidada, resultados con filas vacías,
+/// estadísticas y firmas.
+Uint8List buildReportTemplateDocx({String title = 'Reporte de ensayo'}) {
+  final infoTable = _fixtureTable([
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('Test Type')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(_fixtureParagraph('Operador')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(_fixtureParagraph('Dpto. Calidad')),
+      _fixtureCell('<w:p/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('Mat.Name')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(_fixtureParagraph('Mat.Type')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(_fixtureParagraph('Make Date')),
+      _fixtureCell('<w:p/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('Test For')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(_fixtureParagraph('Humi')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(_fixtureParagraph('Temp')),
+      _fixtureCell('<w:p/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('Lo')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(_fixtureParagraph('PET')),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('<w:p/>'),
+    ]),
+  ]);
+
+  final resultsTable = _fixtureTable([
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('Num')),
+      _fixtureCell(_fixtureParagraph('Area')),
+      _fixtureCell(_fixtureParagraph('Fmax')),
+      _fixtureCell(_fixtureParagraph('Stress')),
+      _fixtureCell(_fixtureParagraph('Elong')),
+      _fixtureCell('<w:p/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('1')),
+      _fixtureCell(_fixtureParagraph('21.7')),
+      _fixtureCell(_fixtureParagraph('284.6')),
+      _fixtureCell(_fixtureParagraph('13.1')),
+      _fixtureCell(_fixtureParagraph('618')),
+      _fixtureCell('<w:p/>'),
+    ]),
+    _emptyFixtureRow(6),
+    _emptyFixtureRow(6),
+    _emptyFixtureRow(6),
+  ]);
+
+  final statsTable = _fixtureTable([
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('Avg')),
+      _fixtureCell(_fixtureParagraph('3.94')),
+      _fixtureCell(_fixtureParagraph('13.67')),
+      _fixtureCell(_fixtureParagraph('1.13')),
+      _fixtureCell(_fixtureParagraph('0.047')),
+      _fixtureCell(_fixtureParagraph('618')),
+    ]),
+    _fixtureRow([
+      _fixtureCell(_fixtureParagraph('Std. Dev.')),
+      _fixtureCell(_fixtureParagraph('0.12')),
+      _fixtureCell(_fixtureParagraph('0.34')),
+      _fixtureCell(_fixtureParagraph('0.05')),
+      _fixtureCell(_fixtureParagraph('0.002')),
+      _fixtureCell(_fixtureParagraph('0')),
+    ]),
+  ]);
+
+  final signatureTable = _fixtureTable([
+    _fixtureRow([_fixtureCell(_fixtureParagraph('assessor:'))]),
+  ], columns: 1);
+  final ratifierTable = _fixtureTable([
+    _fixtureRow([_fixtureCell(_fixtureParagraph('ratifier:'))]),
+  ], columns: 1);
+  final testPersonTable = _fixtureTable([
+    _fixtureRow([_fixtureCell(_fixtureParagraph('test person:'))]),
+  ], columns: 1);
+
+  final topTable = _fixtureTable([
+    _fixtureRow([
+      _fixtureCell(
+        _fixtureParagraph('TLG001'),
+        properties: '<w:gridSpan w:val="6"/>',
+      ),
+    ]),
+    _fixtureRow([
+      _fixtureCell(
+        _fixtureParagraph(title),
+        properties: '<w:gridSpan w:val="6"/>',
+      ),
+    ]),
+    _fixtureRow([
+      _fixtureCell(
+        _fixtureParagraph('Material'),
+        properties: '<w:vMerge w:val="restart"/>',
+      ),
+      _fixtureCell('<w:p/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(
+        _fixtureParagraph('Reporte de prueba de tensión'),
+        properties: '<w:vMerge/>',
+      ),
+      _fixtureCell('<w:p/>'),
+    ]),
+    _emptyFixtureRow(6),
+    _fixtureRow([
+      _fixtureCell('$infoTable<w:p/>', properties: '<w:gridSpan w:val="6"/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(
+        _fixtureParagraph('comment:'),
+        properties: '<w:gridSpan w:val="6"/>',
+      ),
+    ]),
+    _fixtureRow([
+      _fixtureCell(
+        '$resultsTable<w:p/>',
+        properties: '<w:gridSpan w:val="6"/>',
+      ),
+    ]),
+    _emptyFixtureRow(6),
+    _fixtureRow([
+      _fixtureCell('$statsTable<w:p/>', properties: '<w:gridSpan w:val="6"/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(
+        '<w:p><w:r><w:pict/></w:r></w:p>',
+        properties: '<w:gridSpan w:val="6"/>',
+      ),
+    ]),
+    _fixtureRow([
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('$signatureTable<w:p/>'),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('$ratifierTable<w:p/>'),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell(
+        '$testPersonTable<w:p/>',
+        properties: '<w:vMerge w:val="restart"/>',
+      ),
+    ]),
+    _fixtureRow([
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('<w:p/>'),
+      _fixtureCell('<w:p/>', properties: '<w:vMerge/>'),
+    ]),
+    _fixtureRow([
+      _fixtureCell(
+        _fixtureParagraph('Printed in 2024-05-01'),
+        properties: '<w:gridSpan w:val="6"/>',
+      ),
+    ]),
+  ]);
+
+  return zipParts({
+    '[Content_Types].xml': _contentTypes(withHeader: false),
+    '_rels/.rels': _packageRels,
+    'word/document.xml':
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document $_wNs $_rNs $_wpNs $_aNs $_picNs>'
+        '<w:body>${_fixtureParagraph('LOGO')}$topTable<w:sectPr/>'
+        '</w:body></w:document>',
+  });
+}
+
 String _documentXml({
   required List<String> bodyParagraphs,
   required bool withHeader,
@@ -213,6 +425,31 @@ Uint8List buildTensionWorkbook({int firstRow = 2}) {
   excel.delete('Sheet1');
   final bytes = excel.save();
   return Uint8List.fromList(bytes!);
+}
+
+/// Contenido que imita un `.doc` de Word 97-2003 (firma OLE2 + relleno).
+///
+/// No es un documento válido: sólo sirve para probar la detección del formato
+/// antiguo y el flujo de conversión sin depender de Word.
+Uint8List buildLegacyDocBytes({int padding = 512}) {
+  return Uint8List.fromList([
+    0xD0,
+    0xCF,
+    0x11,
+    0xE0,
+    0xA1,
+    0xB1,
+    0x1A,
+    0xE1,
+    ...List<int>.filled(padding, 0),
+  ]);
+}
+
+/// `.docx` mínimo que simula el resultado de convertir un `.doc`.
+Uint8List buildConvertedDocx({
+  List<String> bodyParagraphs = const ['测试报告', '报告编号: A-1'],
+}) {
+  return buildDocx(bodyParagraphs: bodyParagraphs);
 }
 
 /// Devuelve las partes XML del paquete que no son XML bien formado.

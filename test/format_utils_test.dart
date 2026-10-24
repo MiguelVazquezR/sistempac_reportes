@@ -86,4 +86,39 @@ void main() {
       expect(FormatUtils.extensionOf('sin_extension'), '');
     });
   });
+
+  group('FormatUtils conversión de formatos antiguos', () {
+    test('sólo los .doc se convierten automáticamente', () {
+      expect(FormatUtils.isConvertible(ReportFormat.legacyDoc), isTrue);
+      expect(FormatUtils.isConvertible(ReportFormat.legacyXls), isFalse);
+      expect(FormatUtils.isConvertible(ReportFormat.docx), isFalse);
+      expect(FormatUtils.needsManualConversion(ReportFormat.legacyXls), isTrue);
+      expect(
+        FormatUtils.needsManualConversion(ReportFormat.legacyDoc),
+        isFalse,
+      );
+    });
+
+    test('los .doc cuentan como procesables', () {
+      expect(FormatUtils.isProcessable(ReportFormat.xlsx), isTrue);
+      expect(FormatUtils.isProcessable(ReportFormat.docx), isTrue);
+      expect(FormatUtils.isProcessable(ReportFormat.legacyDoc), isTrue);
+      expect(FormatUtils.isProcessable(ReportFormat.legacyXls), isFalse);
+      expect(FormatUtils.isProcessable(ReportFormat.unknown), isFalse);
+    });
+
+    test('un .doc produce un .docx como salida', () {
+      expect(FormatUtils.outputExtension(ReportFormat.docx), '.docx');
+      expect(FormatUtils.outputExtension(ReportFormat.legacyDoc), '.docx');
+      expect(FormatUtils.outputExtension(ReportFormat.xlsx), '.xlsx');
+      expect(FormatUtils.outputExtension(ReportFormat.legacyXls), '.xlsx');
+      expect(
+        FormatUtils.suggestedOutputName(
+          'reporte.doc',
+          format: ReportFormat.legacyDoc,
+        ),
+        'reporte_ES.docx',
+      );
+    });
+  });
 }
