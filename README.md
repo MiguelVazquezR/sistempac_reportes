@@ -33,6 +33,84 @@ flutter build windows --release
 # Resultado: build\windows\x64\runner\Release\reportes_sistempac.exe
 ```
 
+## Icono del ejecutable
+
+El icono que llevan `reportes_sistempac.exe`, la barra de título y la barra de
+tareas sale de `windows/runner/resources/app_icon.ico`, que se genera a partir de
+`lib/images/icon.png` (512×512):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool\generar_icono.ps1
+flutter clean
+flutter build windows --release
+```
+
+El script escribe un `.ico` con siete tamaños (256 px en PNG; 128, 64, 48, 32, 24
+y 16 px en DIB de 32 bpp con máscara), guarda el icono original de Flutter en
+`tool/app_icon_flutter_backup.ico` y comprueba con la API nativa de Windows
+(`LoadImage`) que todos los tamaños se puedan cargar. El `flutter clean` es
+obligatorio: sin él, MSBuild puede reutilizar el `.rc` ya compilado y el `.exe`
+conserva el icono anterior.
+
+## Distribución e instalación en otro equipo (Windows 10)
+
+### 1. Generar el paquete
+
+```powershell
+flutter build windows --release
+powershell -ExecutionPolicy Bypass -File tool\empaquetar_release.ps1
+# Resultado: dist\OptimizadorReportes-1.0.0-win64.zip (~12 MB)
+```
+
+El `.exe` no funciona solo, así que el ZIP incluye la carpeta `Release` completa:
+`reportes_sistempac.exe`, `flutter_windows.dll`, las DLL de los plugins
+(`desktop_drop_plugin.dll`, `screen_retriever_windows_plugin.dll`,
+`window_manager_plugin.dll`) y `data\` con `app.so`, `icudtl.dat` y
+`flutter_assets\`. El script se niega a comprimir si falta alguno de esos
+elementos.
+
+### 2. Requisitos del equipo destino
+
+| Requisito | Detalle |
+|---|---|
+| Windows 10 de 64 bits | No hace falta Flutter ni Visual Studio |
+| VC++ Redistributable 2015-2022 (x64) | Solo si al abrir aparece un error por `VCRUNTIME140.dll` o `0xc000007b`. Instalación silenciosa: `vc_redist.x64.exe /install /quiet /norestart` |
+| Microsoft Word o LibreOffice | Solo para convertir `.doc`; los `.xlsx` y `.docx` no necesitan nada |
+
+### 3. Instalación
+
+1. Copiar el ZIP por USB o por red.
+2. Descomprimirlo **completo** en `C:\Program Files\OptimizadorReportes` (o en
+   `C:\Apps\...` si no hay permisos de administrador). El `.exe` debe quedar junto
+   a las DLL y a la carpeta `data\`.
+3. Crear un acceso directo al `.exe` en el Escritorio o en el menú Inicio; hereda
+   el icono de la aplicación:
+
+   ```powershell
+   $acceso = (New-Object -ComObject WScript.Shell).CreateShortcut(
+       "$env:USERPROFILE\Desktop\Optimizador de Reportes.lnk")
+   $acceso.TargetPath = 'C:\Program Files\OptimizadorReportes\reportes_sistempac.exe'
+   $acceso.WorkingDirectory = 'C:\Program Files\OptimizadorReportes'
+   $acceso.Save()
+   ```
+
+4. La primera vez, Windows puede mostrar *"Windows protegió su PC"* porque el
+   `.exe` no está firmado: **Más información → Ejecutar de todas formas**.
+
+### 4. Configuración inicial (no se copia entre equipos)
+
+`shared_preferences` guarda los ajustes en `%APPDATA%` de cada usuario, así que en
+el equipo nuevo hay que volver a escribir el nombre de la empresa, el título y la
+carpeta de salida, y volver a seleccionar el logo. Conviene guardar el logo en una
+ruta fija (por ejemplo `C:\Sistempac\logo.png`) para que la ruta configurada siga
+siendo válida.
+
+### 5. Actualizaciones
+
+Cerrar la aplicación antes de reemplazar los archivos (Windows bloquea el `.exe`
+en ejecución). Si el Explorador sigue mostrando el icono anterior, refrescar la
+caché de iconos con `ie4uinit.exe -show`.
+
 ## Cómo se usa
 
 1. **Ajustes**: escribe el nombre de la empresa, el título predeterminado y
@@ -108,7 +186,9 @@ lib/
                  disco y configuración.
   state/         Controladores ChangeNotifier (ajustes y procesamiento).
   ui/            Shell, páginas y widgets.
+  images/        Icono de la aplicación; origen del icono del ejecutable.
 test/            Pruebas con archivos OOXML sintéticos.
+tool/            generar_icono.ps1 (icono del .exe) y empaquetar_release.ps1 (ZIP).
 ```
 
 - Gestión de estado: `ChangeNotifier` + `ListenableBuilder`, sin paquetes de
